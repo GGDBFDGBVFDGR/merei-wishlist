@@ -56,7 +56,9 @@ function isHttp(value) {
 
 function safeImg(src) {
   if (!src) return '';
+  if (src.startsWith('data:image/')) return src;
   if (src.startsWith('/uploads/')) return src.slice(1);
+  if (src.startsWith('uploads/')) return src;
   return isHttp(src) ? src : '';
 }
 
@@ -73,15 +75,6 @@ function formatDate(iso) {
   return `${day} ${months[month - 1]} ${year}`;
 }
 
-function plural(n, one, few, many) {
-  const abs = Math.abs(n) % 100;
-  const last = abs % 10;
-  if (abs > 10 && abs < 20) return many;
-  if (last === 1) return one;
-  if (last >= 2 && last <= 4) return few;
-  return many;
-}
-
 function birthdayTarget(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return null;
   const [year, month, day] = iso.split('-').map(Number);
@@ -92,32 +85,43 @@ function paintCountdown(node, target) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (today.getTime() === target.getTime()) {
-    node.hidden = false;
-    node.className = 'countdown is-today';
-    node.replaceChildren(h('p', { class: 'countdown-today' }, 'Сегодня день рождения'));
+    if (node.dataset.mode !== 'today') {
+      node.dataset.mode = 'today';
+      node.hidden = false;
+      node.className = 'countdown is-today';
+      node.replaceChildren(h('p', { class: 'countdown-today' }, 'Сегодня день рождения'));
+    }
     return;
   }
   if (today > target) {
+    node.dataset.mode = 'past';
     node.hidden = true;
     node.replaceChildren();
     return;
   }
   const total = Math.max(0, Math.floor((target - now) / 1000));
-  const parts = [
-    [Math.floor(total / 86400), 'день', 'дня', 'дней'],
-    [Math.floor((total % 86400) / 3600), 'час', 'часа', 'часов'],
-    [Math.floor((total % 3600) / 60), 'минута', 'минуты', 'минут'],
-    [total % 60, 'секунда', 'секунды', 'секунд'],
+  const values = [
+    Math.floor(total / 86400),
+    Math.floor((total % 86400) / 3600),
+    Math.floor((total % 3600) / 60),
+    total % 60,
   ];
-  node.hidden = false;
-  node.className = 'countdown';
-  node.replaceChildren(
-    h('p', { class: 'countdown-label' }, 'осталось'),
-    ...parts.map(([value, one, few, many]) => h('div', { class: 'count-cell' }, [
-      h('b', {}, String(value).padStart(2, '0')),
-      h('span', {}, plural(value, one, few, many)),
-    ]))
-  );
+  if (node.dataset.mode !== 'left' || node.querySelectorAll('.count-cell b').length !== 4) {
+    node.dataset.mode = 'left';
+    node.hidden = false;
+    node.className = 'countdown';
+    node.replaceChildren(
+      h('p', { class: 'countdown-label' }, 'осталось'),
+      ...['дн', 'ч', 'мин', 'сек'].map((label) => h('div', { class: 'count-cell' }, [
+        h('b', {}, '00'),
+        h('span', {}, label),
+      ]))
+    );
+  }
+  node.querySelectorAll('.count-cell b').forEach((cell, index) => {
+    const text = String(values[index]).padStart(2, '0');
+    if (cell.textContent !== text) cell.textContent = text;
+  });
 }
 
 function tickCountdown() {
@@ -188,36 +192,298 @@ function enterOwner() {
   openModal('modal-login');
 }
 
-async function api(url, options = {}) {
-  const headers = new Headers(options.headers || {});
-  if (state.token) headers.set('Authorization', `Bearer ${state.token}`);
-  let body;
-  if (options.json) {
-    headers.set('Content-Type', 'application/json');
-    body = JSON.stringify(options.json);
-  } else if (options.body) {
-    body = options.body;
-  }
+const CLOUD_NS = 'merei-wishlist-7k3';
+const CLOUD_KEY = '440687c43f42e339a0f642bf31d09528639d1f650248464e94ad80369f866c44';
+const CLOUD_ROOT = 'https://mantledb.sh/v2';
+
+let loginFails = [];
+
+function cleanText(value, max) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function newId() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function httpUrl(value) {
+  const link = cleanText(value, 500);
+  if (link && !isHttp(link)) throw new Error('Ссылка должна начинаться с http:// или https://');
+  return link;
+}
+
+async function cloudRequest(urlPath, method, body) {
   let response;
   try {
-    response = await fetch(url, { method: options.method || 'GET', headers, body });
+    response = await fetch(`${CLOUD_ROOT}/${urlPath}`, {
+      method,
+      headers: {
+        'X-Mantle-Key': CLOUD_KEY,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   } catch {
-    throw new Error('Нет связи с сервером. Запусти сайт командой npm start');
+    throw new Error('Нет связи. Проверь интернет и открой страницу ещё раз.');
   }
-  const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && options.authRedirect !== false && !url.endsWith('/login')) {
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(payload.message || payload.error || 'Не получилось сохранить');
+  return payload;
+}
+
+function orderGifts(gifts, order) {
+  const byId = new Map(gifts.map((gift) => [gift.id, gift]));
+  const ordered = [];
+  (order || []).forEach((id) => {
+    if (!byId.has(id)) return;
+    ordered.push(byId.get(id));
+    byId.delete(id);
+  });
+  byId.forEach((gift) => ordered.push(gift));
+  return ordered;
+}
+
+function toPublic(data) {
+  return {
+    profile: {
+      name: data.profile.name || '',
+      date: data.profile.date || '',
+      message: data.profile.message || '',
+      photo: data.profile.photo || '',
+    },
+    kaspi: data.kaspi || '',
+    gifts: (data.gifts || []).map((gift) => ({
+      id: gift.id,
+      title: gift.title || '',
+      description: gift.description || '',
+      price: gift.price || '',
+      link: gift.link || '',
+      image: gift.image || '',
+      reservedBy: gift.reservedBy || '',
+    })),
+  };
+}
+
+async function loadRecord() {
+  const listed = await cloudRequest(`list/${CLOUD_NS}`, 'GET');
+  const paths = ((listed && listed.entries) || []).map((entry) => entry.path);
+  if (!paths.includes('meta')) throw new Error('Список ещё открывается. Обнови страницу через минуту.');
+  const meta = await cloudRequest(`${CLOUD_NS}/meta`, 'GET');
+  if (!meta) throw new Error('Список ещё открывается. Обнови страницу через минуту.');
+  const gifts = [];
+  for (const giftPath of paths.filter((item) => item.startsWith('gift/'))) {
+    const gift = await cloudRequest(`${CLOUD_NS}/${giftPath}`, 'GET');
+    if (gift && gift.id) gifts.push(gift);
+  }
+  return {
+    profile: {
+      name: meta.name || '',
+      date: meta.date || '',
+      message: meta.message || '',
+      photo: meta.photo || '',
+    },
+    kaspi: meta.kaspi || '',
+    adminPassword: meta.adminPassword || '',
+    gifts: orderGifts(gifts, meta.order),
+  };
+}
+
+async function saveMeta(data) {
+  await cloudRequest(`${CLOUD_NS}/meta`, 'POST', {
+    name: data.profile.name || '',
+    date: data.profile.date || '',
+    message: data.profile.message || '',
+    photo: data.profile.photo || '',
+    kaspi: data.kaspi || '',
+    adminPassword: data.adminPassword || '',
+    order: data.gifts.map((gift) => gift.id),
+  });
+}
+
+async function saveGift(gift) {
+  await cloudRequest(`${CLOUD_NS}/gift/${gift.id}`, 'POST', {
+    id: gift.id,
+    title: gift.title || '',
+    description: gift.description || '',
+    price: gift.price || '',
+    link: gift.link || '',
+    image: gift.image || '',
+    reservedBy: gift.reservedBy || '',
+  });
+}
+
+async function compressImage(file) {
+  if (!file || !file.size) return '';
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type || '')) {
+    throw new Error('Можно загрузить только картинку JPG, PNG, WEBP или GIF');
+  }
+  if (file.size > 8 * 1024 * 1024) throw new Error('Картинка больше 8 МБ');
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+  if (!blob) throw new Error('Не получилось сжать фото');
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Не получилось прочитать фото'));
+    reader.readAsDataURL(blob);
+  });
+  if (dataUrl.length > 180000) throw new Error('Фото слишком большое. Выбери другое или вставь ссылку.');
+  return dataUrl;
+}
+
+function assertAdmin(url, options) {
+  if (state.token.startsWith('cloud-')) return;
+  if (options.authRedirect !== false) {
     state.admin = false;
     state.token = '';
     sessionStorage.removeItem(TOKEN_KEY);
     lastSnap = '';
     openModal('modal-login');
   }
-  if (!response.ok) {
-    throw new Error(data.error || (response.status === 404
-      ? 'На этой ссылке бронь и вход не сохраняются'
-      : 'Не получилось'));
+  throw new Error('Нужно войти заново');
+}
+
+async function api(url, options = {}) {
+  const method = options.method || 'GET';
+  if (url === 'api/wishlist' && method === 'GET') return toPublic(await loadRecord());
+
+  if (url === 'api/reserve' && method === 'POST') {
+    const name = cleanText(options.json.name, 40);
+    const id = cleanText(options.json.id, 40);
+    if (name.length < 2) throw new Error('Напиши, как тебя зовут');
+    const data = await loadRecord();
+    const gift = data.gifts.find((item) => item.id === id);
+    if (!gift) throw new Error('Подарок не найден');
+    if (gift.reservedBy) throw new Error('Этот подарок уже занят');
+    gift.reservedBy = name;
+    await saveGift(gift);
+    const saved = await cloudRequest(`${CLOUD_NS}/gift/${id}`, 'GET');
+    if (!saved || !sameName(saved.reservedBy, name)) throw new Error('Этот подарок уже занят');
+    return toPublic(await loadRecord());
   }
-  return data;
+
+  if (url === 'api/unreserve' && method === 'POST') {
+    const name = cleanText(options.json.name, 40);
+    const id = cleanText(options.json.id, 40);
+    if (name.length < 2) throw new Error('Напиши то же имя, которым бронировала');
+    const data = await loadRecord();
+    const gift = data.gifts.find((item) => item.id === id);
+    if (!gift) throw new Error('Подарок не найден');
+    if (gift.reservedBy && !sameName(gift.reservedBy, name)) {
+      throw new Error('Снять бронь может только тот, кто её поставил');
+    }
+    gift.reservedBy = '';
+    await saveGift(gift);
+    return toPublic(await loadRecord());
+  }
+
+  if (url === 'api/admin/login' && method === 'POST') {
+    const now = Date.now();
+    loginFails = loginFails.filter((time) => now - time < 10 * 60 * 1000);
+    if (loginFails.length >= 12) throw new Error('Слишком много попыток. Подожди немного.');
+    const data = await loadRecord();
+    const password = String((options.json && options.json.password) || '');
+    if (password !== String(data.adminPassword || '')) {
+      loginFails.push(Date.now());
+      throw new Error('Неверный пароль');
+    }
+    return { token: `cloud-${newId()}` };
+  }
+
+  if (url === 'api/admin/logout') return { ok: true };
+  if (url === 'api/admin/me') {
+    assertAdmin(url, options);
+    return { ok: true };
+  }
+
+  if (url === 'api/admin/profile' && method === 'POST') {
+    assertAdmin(url, options);
+    const form = options.body;
+    const data = await loadRecord();
+    const name = cleanText(form.get('name'), 40);
+    if (name.length < 2) throw new Error('Добавь имя именинника');
+    const date = String(form.get('date') || '').trim();
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Некорректная дата');
+    const kaspi = String(form.get('kaspi') || '').replace(/\D/g, '');
+    if (!/^8\d{10}$/.test(kaspi)) throw new Error('Номер Kaspi: 11 цифр, начинается с 8');
+    const nextPassword = String(form.get('password') || '').trim();
+    if (nextPassword && nextPassword.length < 4) throw new Error('Пароль должен быть длиннее 3 символов');
+    let photo = data.profile.photo || '';
+    if (form.get('removeImage') === '1') photo = '';
+    const file = form.get('image');
+    if (file instanceof File && file.size) photo = await compressImage(file);
+    data.profile = { name, date, message: cleanText(form.get('message'), 280), photo };
+    data.kaspi = kaspi;
+    if (nextPassword) data.adminPassword = nextPassword;
+    await saveMeta(data);
+    return toPublic(data);
+  }
+
+  if ((url === 'api/admin/gifts' || url.startsWith('api/admin/gifts/')) && method === 'POST' && !url.endsWith('/release')) {
+    assertAdmin(url, options);
+    const form = options.body;
+    const data = await loadRecord();
+    const id = url === 'api/admin/gifts' ? '' : decodeURIComponent(url.slice('api/admin/gifts/'.length));
+    const previous = id ? data.gifts.find((item) => item.id === id) : null;
+    if (id && !previous) throw new Error('Подарок не найден');
+    const title = cleanText(form.get('title'), 80);
+    if (title.length < 2) throw new Error('Добавь название подарка');
+    const link = httpUrl(form.get('link'));
+    const imageUrl = cleanText(form.get('imageUrl'), 500);
+    if (imageUrl && !isHttp(imageUrl)) throw new Error('Ссылка на фото должна начинаться с http:// или https://');
+    let image = previous ? previous.image || '' : '';
+    const file = form.get('image');
+    if (file instanceof File && file.size) image = await compressImage(file);
+    else if (imageUrl) image = imageUrl;
+    else if (form.get('removeImage') === '1') image = '';
+    const gift = {
+      id: previous ? previous.id : newId(),
+      title,
+      description: cleanText(form.get('description'), 400),
+      price: cleanText(form.get('price'), 40),
+      link,
+      image,
+      reservedBy: previous ? previous.reservedBy || '' : '',
+    };
+    if (previous) Object.assign(previous, gift);
+    else data.gifts.push(gift);
+    await saveGift(gift);
+    await saveMeta(data);
+    return toPublic(data);
+  }
+
+  if (url.startsWith('api/admin/gifts/') && method === 'DELETE') {
+    assertAdmin(url, options);
+    const id = decodeURIComponent(url.slice('api/admin/gifts/'.length));
+    const data = await loadRecord();
+    if (!data.gifts.some((item) => item.id === id)) throw new Error('Подарок не найден');
+    data.gifts = data.gifts.filter((item) => item.id !== id);
+    await cloudRequest(`${CLOUD_NS}/gift/${id}`, 'DELETE');
+    await saveMeta(data);
+    return toPublic(data);
+  }
+
+  if (url.endsWith('/release') && method === 'POST') {
+    assertAdmin(url, options);
+    const id = decodeURIComponent(url.slice('api/admin/gifts/'.length, -'/release'.length));
+    const data = await loadRecord();
+    const gift = data.gifts.find((item) => item.id === id);
+    if (!gift) throw new Error('Подарок не найден');
+    gift.reservedBy = '';
+    await saveGift(gift);
+    return toPublic(data);
+  }
+
+  throw new Error('Не получилось');
 }
 
 function render() {
@@ -242,16 +508,18 @@ function renderHero() {
     tabindex: state.admin ? '0' : null,
     'aria-label': state.admin ? 'Изменить фото и имя' : null,
   });
+  const frame = h('div', { class: 'polaroid-photo' });
   const src = safeImg(profile.photo);
   if (src) {
     const img = h('img', { src, alt: profile.name || 'Именинник' });
     img.addEventListener('error', () => {
-      img.replaceWith(emptyPhoto());
+      frame.replaceChildren(emptyPhoto());
     });
-    photo.append(img);
+    frame.append(img);
   } else {
-    photo.append(emptyPhoto());
+    frame.append(emptyPhoto());
   }
+  photo.append(frame);
   photo.append(h('span', { class: 'polaroid-caption' }, profile.name || 'Именинник'));
 
   const copy = h('div', { class: 'hero-copy' });
@@ -425,16 +693,8 @@ async function reload(options = {}) {
     state.data = await api('api/wishlist');
     render();
   } catch (error) {
-    try {
-      const response = await fetch('wishlist.json');
-      if (!response.ok) throw error;
-      state.data = await response.json();
-      render();
-      return;
-    } catch {
-      if (!state.data) showError(error.message);
-      if (!options.quiet) toast(error.message);
-    }
+    if (!state.data) showError(error.message);
+    if (!options.quiet) toast(error.message);
   }
 }
 

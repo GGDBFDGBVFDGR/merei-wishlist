@@ -3,9 +3,28 @@
     "name": "Мерей",
     "date": "2026-12-03",
     "message": "Напиши имя и выбери подарки. Можно взять несколько, но один подарок выбирает только один человек.",
-    "photo": ""
+    "photo": "/uploads/1794155972588-64b7ebef.jpeg"
   },
+  "gifts": [
+    {
+      "id": "b298acca46b4ac69",
+      "title": "Игрушка куроми",
+      "description": "",
+      "price": "2290",
+      "link": "https://l.kaspi.kz/shop/2sfEBXUPCHWyZCo?sessionId=28800b25-d24f-4923-8805-f861103de2091794156092",
+      "image": "/uploads/1794156346396-7bb33ab3.jpeg",
+      "reservedBy": "Гульнур"
+    },
+    {
+      "id": "c3cb53432e8d9e81",
+      "title": "Фотоапарат",
+      "description": "",
+      "price": "13500",
+      "link": "https://l.kaspi.kz/shop/HrhNtqv2YN258Rs?sessionId=28800b25-d24f-4923-8805-f861103de2091794156092",
+      "image": "/uploads/1794156404027-95c1c459.jpeg",
+      "reservedBy": ""
+    }
+  ],
   "kaspi": "87005050822",
-  "adminPassword": "kuromi",
-  "gifts": []
+  "adminPassword": "kuromi"
 }

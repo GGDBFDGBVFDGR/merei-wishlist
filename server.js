@@ -25,36 +25,140 @@ const DEFAULT_DATA = {
   gifts: [],
 };
 
-function readData() {
+const CLOUD_NS = 'merei-wishlist-7k3';
+const CLOUD_KEY = '440687c43f42e339a0f642bf31d09528639d1f650248464e94ad80369f866c44';
+const CLOUD_ROOT = 'https://mantledb.sh/v2';
+
+function normalize(raw) {
+  return {
+    profile: { ...DEFAULT_DATA.profile, ...(raw.profile || {}) },
+    gifts: Array.isArray(raw.gifts) ? raw.gifts : [],
+    kaspi: raw.kaspi || DEFAULT_DATA.kaspi,
+    adminPassword: raw.adminPassword || DEFAULT_DATA.adminPassword,
+  };
+}
+
+function readLocal() {
   try {
-    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    raw.profile = { ...DEFAULT_DATA.profile, ...(raw.profile || {}) };
-    raw.gifts = Array.isArray(raw.gifts) ? raw.gifts : [];
-    raw.kaspi = raw.kaspi || DEFAULT_DATA.kaspi;
-    raw.adminPassword = raw.adminPassword || DEFAULT_DATA.adminPassword;
-    return raw;
+    return normalize(JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')));
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      writeData(DEFAULT_DATA);
-      return JSON.parse(JSON.stringify(DEFAULT_DATA));
-    }
+    if (error.code === 'ENOENT') return normalize(DEFAULT_DATA);
     throw error;
   }
 }
 
-function writeData(data) {
+function writeLocal(data) {
   const tmp = `${DATA_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   fs.renameSync(tmp, DATA_FILE);
+}
+
+async function cloudRequest(urlPath, method, body) {
+  const response = await fetch(`${CLOUD_ROOT}/${urlPath}`, {
+    method,
+    headers: {
+      'X-Mantle-Key': CLOUD_KEY,
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const error = new Error(payload.message || payload.error || 'Облако недоступно');
+    error.status = 502;
+    throw error;
+  }
+  return payload;
+}
+
+function orderGifts(gifts, order) {
+  const byId = new Map(gifts.map((gift) => [gift.id, gift]));
+  const ordered = [];
+  (order || []).forEach((id) => {
+    if (!byId.has(id)) return;
+    ordered.push(byId.get(id));
+    byId.delete(id);
+  });
+  byId.forEach((gift) => ordered.push(gift));
+  return ordered;
+}
+
+async function loadCloud() {
+  const listed = await cloudRequest(`list/${CLOUD_NS}`, 'GET');
+  if (!listed) return null;
+  const paths = (listed.entries || []).map((entry) => entry.path);
+  if (!paths.includes('meta')) return null;
+  const meta = await cloudRequest(`${CLOUD_NS}/meta`, 'GET');
+  if (!meta) return null;
+  const gifts = [];
+  for (const giftPath of paths.filter((item) => item.startsWith('gift/'))) {
+    const gift = await cloudRequest(`${CLOUD_NS}/${giftPath}`, 'GET');
+    if (gift && gift.id) gifts.push(gift);
+  }
+  return normalize({
+    profile: {
+      name: meta.name,
+      date: meta.date,
+      message: meta.message,
+      photo: meta.photo,
+    },
+    kaspi: meta.kaspi,
+    adminPassword: meta.adminPassword,
+    gifts: orderGifts(gifts, meta.order),
+  });
+}
+
+async function writeData(data) {
+  const listed = await cloudRequest(`list/${CLOUD_NS}`, 'GET');
+  const existing = new Set(
+    ((listed && listed.entries) || [])
+      .map((entry) => entry.path)
+      .filter((item) => item.startsWith('gift/'))
+  );
+  const keep = new Set();
+  await cloudRequest(`${CLOUD_NS}/meta`, 'POST', {
+    name: data.profile.name || '',
+    date: data.profile.date || '',
+    message: data.profile.message || '',
+    photo: data.profile.photo || '',
+    kaspi: data.kaspi || '',
+    adminPassword: data.adminPassword || '',
+    order: (data.gifts || []).map((gift) => gift.id),
+  });
+  for (const gift of data.gifts || []) {
+    keep.add(`gift/${gift.id}`);
+    await cloudRequest(`${CLOUD_NS}/gift/${gift.id}`, 'POST', {
+      id: gift.id,
+      title: gift.title || '',
+      description: gift.description || '',
+      price: gift.price || '',
+      link: gift.link || '',
+      image: gift.image || '',
+      reservedBy: gift.reservedBy || '',
+    });
+  }
+  for (const giftPath of existing) {
+    if (!keep.has(giftPath)) await cloudRequest(`${CLOUD_NS}/${giftPath}`, 'DELETE');
+  }
+  writeLocal(data);
+}
+
+async function readData() {
+  const cloud = await loadCloud();
+  if (cloud) return cloud;
+  const local = readLocal();
+  await writeData(local);
+  return local;
 }
 
 let queue = Promise.resolve();
 
 function withData(mutator) {
   const run = queue.then(async () => {
-    const data = readData();
+    const data = await readData();
     const result = await mutator(data);
-    writeData(data);
+    await writeData(data);
     return result;
   });
   queue = run.then(
@@ -216,8 +320,12 @@ app.use('/api', (req, res, next) => {
 });
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/api/wishlist', (req, res) => {
-  res.json(publicView(readData()));
+app.get('/api/wishlist', async (req, res, next) => {
+  try {
+    res.json(publicView(await readData()));
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/reserve', async (req, res, next) => {
@@ -259,19 +367,23 @@ app.post('/api/unreserve', async (req, res, next) => {
   }
 });
 
-app.post('/api/admin/login', (req, res) => {
-  if (tooManyLogins()) {
-    return res.status(429).json({ error: 'Слишком много попыток. Подожди немного.' });
+app.post('/api/admin/login', async (req, res, next) => {
+  try {
+    if (tooManyLogins()) {
+      return res.status(429).json({ error: 'Слишком много попыток. Подожди немного.' });
+    }
+    const data = await readData();
+    const password = String(req.body.password || '');
+    if (!safeEqual(password, data.adminPassword || '')) {
+      loginFails.push(Date.now());
+      return res.status(401).json({ error: 'Неверный пароль' });
+    }
+    const token = crypto.randomBytes(24).toString('hex');
+    tokens.set(token, Date.now() + TOKEN_TTL);
+    res.json({ token });
+  } catch (error) {
+    next(error);
   }
-  const data = readData();
-  const password = String(req.body.password || '');
-  if (!safeEqual(password, data.adminPassword || '')) {
-    loginFails.push(Date.now());
-    return res.status(401).json({ error: 'Неверный пароль' });
-  }
-  const token = crypto.randomBytes(24).toString('hex');
-  tokens.set(token, Date.now() + TOKEN_TTL);
-  res.json({ token });
 });
 
 app.post('/api/admin/logout', auth, (req, res) => {
