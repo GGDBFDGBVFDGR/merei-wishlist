@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#160810">
+  <title>Вишлист</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@500;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=9">
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-bow" viewBox="0 0 120 120">
+      <path d="M58 58 C56 30 16 24 16 50 C16 74 42 76 58 64 Z" fill="#ff4f9a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M62 58 C64 30 104 24 104 50 C104 74 78 76 62 64 Z" fill="#ff4f9a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M52 68 L28 102 L50 86 Z" fill="#ff4f9a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M68 68 L92 102 L70 86 Z" fill="#ff4f9a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <circle cx="60" cy="62" r="11" fill="#fff4f9" stroke="#1a0610" stroke-width="5"/>
+    </symbol>
+    <symbol id="i-star" viewBox="0 0 120 120">
+      <polygon points="60,8 74,44 112,46 82,70 92,108 60,88 28,108 38,70 8,46 46,44" fill="#ffe56a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-heart" viewBox="0 0 120 120">
+      <path d="M60 104 C60 104 14 74 14 46 C14 28 28 18 42 24 C50 28 56 36 60 44 C64 36 70 28 78 24 C92 18 106 28 106 46 C106 74 60 104 60 104 Z" fill="#ff4f9a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M42 42c6-8 16-4 16 4" fill="none" stroke="#fff4f9" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-pop" viewBox="0 0 120 120">
+      <rect x="54" y="72" width="12" height="36" rx="6" fill="#fff4f9" stroke="#1a0610" stroke-width="5"/>
+      <circle cx="60" cy="48" r="30" fill="#ff4f9a" stroke="#1a0610" stroke-width="5"/>
+      <circle cx="60" cy="48" r="16" fill="#fff4f9" stroke="#1a0610" stroke-width="4"/>
+      <circle cx="60" cy="48" r="6" fill="#e3c4ff" stroke="#1a0610" stroke-width="3"/>
+    </symbol>
+    <symbol id="i-gem" viewBox="0 0 120 120">
+      <polygon points="60,8 110,60 60,112 10,60" fill="#e3c4ff" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+      <polygon points="60,28 86,60 60,92 34,60" fill="#fff4f9" stroke="#1a0610" stroke-width="4" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-spark" viewBox="0 0 120 120">
+      <path d="M60 6 L72 46 L114 60 L72 74 L60 114 L48 74 L6 60 L48 46 Z" fill="#ffe56a" stroke="#1a0610" stroke-width="5" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
+  <div id="gate" class="gate">
+    <div class="diamond-bar" aria-hidden="true"></div>
+    <div class="scene gate-scene">
+      <div class="floaters" aria-hidden="true">
+        <svg class="floater" viewBox="0 0 120 120" style="--x: -2%; --y: 40px; --s: 84px; --r: -16deg; --d: 0s"><use href="#i-star"/></svg>
+        <svg class="floater" viewBox="0 0 120 120" style="--x: 88%; --y: 24px; --s: 78px; --r: 12deg; --d: -1.2s"><use href="#i-heart"/></svg>
+        <svg class="floater" viewBox="0 0 120 120" style="--x: 90%; --y: 420px; --s: 72px; --r: -8deg; --d: -2s"><use href="#i-spark"/></svg>
+        <svg class="floater" viewBox="0 0 120 120" style="--x: -3%; --y: 460px; --s: 70px; --r: 14deg; --d: -0.6s"><use href="#i-bow"/></svg>
+      </div>
+      <div class="gate-panel">
+        <p class="eyebrow">вишлист</p>
+        <h1 class="gate-title">Кто заходит?</h1>
+        <p class="gate-lead">Войти может только именинник. Если даришь подарок — напиши имя и выбирай.</p>
+        <div id="gate-count" class="countdown" role="timer" aria-live="off" hidden></div>
+        <div class="doors">
+          <form class="door guest" id="form-guest">
+            <svg viewBox="0 0 120 120" aria-hidden="true"><use href="#i-heart"/></svg>
+            <strong>Выбрать подарки</strong>
+            <span>Напиши имя и зайди. Один человек может выбрать несколько подарков, но один подарок — только один человек.</span>
+            <label>Твоё имя
+              <input name="name" required minlength="2" maxlength="40" autocomplete="name" placeholder="Как тебя зовут?">
+            </label>
+            <button class="btn primary" type="submit">Зайти и выбрать</button>
+          </form>
+          <button class="door owner" type="button" data-action="enter-owner">
+            <svg viewBox="0 0 120 120" aria-hidden="true"><use href="#i-bow"/></svg>
+            <strong>Войти</strong>
+            <span>Только для именинника: фото, подарки и номер Kaspi.</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+  <div class="diamond-bar" aria-hidden="true"></div>
+
+  <div class="scene">
+    <div class="floaters" aria-hidden="true">
+      <svg class="floater" viewBox="0 0 120 120" style="--x: -2%; --y: 90px; --s: 92px; --r: -16deg; --d: 0s"><use href="#i-star"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: 86%; --y: 70px; --s: 84px; --r: 12deg; --d: -1.2s"><use href="#i-heart"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: 92%; --y: 340px; --s: 74px; --r: -8deg; --d: -2s"><use href="#i-spark"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: -4%; --y: 420px; --s: 78px; --r: 14deg; --d: -0.6s"><use href="#i-pop"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: 88%; --y: 620px; --s: 96px; --r: -12deg; --d: -1.8s"><use href="#i-bow"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: -3%; --y: 760px; --s: 70px; --r: 8deg; --d: -2.4s"><use href="#i-gem"/></svg>
+      <svg class="floater" viewBox="0 0 120 120" style="--x: 90%; --y: 980px; --s: 80px; --r: 18deg; --d: -0.4s"><use href="#i-heart"/></svg>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 120 120" class="brand-mark" aria-hidden="true"><use href="#i-bow"/></svg>
+        <span>вишлист</span>
+      </div>
+      <div class="top-actions">
+        <button class="btn tiny" type="button" data-action="copy-link">Скопировать ссылку</button>
+        <button class="btn tiny primary" type="button" id="edit-btn" data-action="open-login">Редактировать</button>
+      </div>
+    </header>
+
+    <div id="adminbar"></div>
+    <section id="hero" aria-live="polite">
+      <p class="loading">Загружаю вишлист…</p>
+    </section>
+  </div>
+
+  <div class="collar" aria-hidden="true"></div>
+
+  <div class="scene scene-next">
+    <div class="sheet-wrap">
+      <div class="sheet-tag">стикеры</div>
+      <div class="sheet">
+        <svg style="--r:-8deg" viewBox="0 0 120 120"><use href="#i-bow"/></svg>
+        <svg style="--r:-4deg" viewBox="0 0 120 120"><use href="#i-star"/></svg>
+        <svg style="--r:7deg" viewBox="0 0 120 120"><use href="#i-heart"/></svg>
+        <svg style="--r:-6deg" viewBox="0 0 120 120"><use href="#i-pop"/></svg>
+        <svg style="--r:5deg" viewBox="0 0 120 120"><use href="#i-gem"/></svg>
+        <svg style="--r:-3deg" viewBox="0 0 120 120"><use href="#i-spark"/></svg>
+      </div>
+    </div>
+
+    <section id="kaspi" aria-label="Kaspi"></section>
+
+    <section class="gifts-section" aria-labelledby="gifts-title">
+      <div class="section-head">
+        <h2 id="gifts-title">Подарки</h2>
+        <div id="counts" class="counts"></div>
+      </div>
+      <div id="gifts" class="gift-grid"></div>
+    </section>
+
+    <footer class="footer">
+      <p>Один человек может выбрать несколько подарков. Несколько людей не могут выбрать один и тот же.</p>
+    </footer>
+  </div>
+
+  <div class="diamond-bar diamond-bottom" aria-hidden="true"></div>
+  </div>
+
+  <div class="modal" id="modal-login" hidden>
+    <div class="modal-back" data-action="close-modal"></div>
+    <form class="modal-card" id="form-login" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <h2 id="login-title">Вход именинника</h2>
+      <p class="hint">Пароль нужен, чтобы менять фото, подарки и номер Kaspi.</p>
+      <label>Пароль
+        <input name="password" type="password" required autocomplete="current-password" placeholder="Пароль">
+      </label>
+      <div class="modal-actions">
+        <button class="btn primary" type="submit">Войти</button>
+        <button class="btn ghost" type="button" data-action="close-modal">Отмена</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal" id="modal-profile" hidden>
+    <div class="modal-back" data-action="close-modal"></div>
+    <form class="modal-card" id="form-profile" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <h2 id="profile-title">Фото и имя</h2>
+      <label>Имя
+        <input name="name" required maxlength="40" autocomplete="name">
+      </label>
+      <label>Дата дня рождения
+        <input name="date" type="date">
+      </label>
+      <label>Текст на странице
+        <textarea name="message" maxlength="280" rows="3"></textarea>
+      </label>
+      <label>Фото именинника
+        <input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+      </label>
+      <img id="profile-preview" class="preview" alt="" hidden>
+      <label class="check">
+        <input name="removeImage" type="checkbox" value="1">
+        Убрать текущее фото
+      </label>
+      <label>Номер Kaspi
+        <input name="kaspi" inputmode="numeric" required maxlength="20" placeholder="87005050822">
+      </label>
+      <label>Новый пароль
+        <input name="password" type="password" minlength="4" autocomplete="new-password" placeholder="Оставь пустым, если не меняешь">
+      </label>
+      <div class="modal-actions">
+        <button class="btn primary" type="submit">Сохранить</button>
+        <button class="btn ghost" type="button" data-action="close-modal">Отмена</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal" id="modal-gift" hidden>
+    <div class="modal-back" data-action="close-modal"></div>
+    <form class="modal-card" id="form-gift" role="dialog" aria-modal="true" aria-labelledby="gift-title">
+      <h2 id="gift-title">Новый подарок</h2>
+      <input type="hidden" name="id" id="gift-id">
+      <p class="hint" id="gift-status" hidden></p>
+      <label>Название
+        <input name="title" required maxlength="80" placeholder="Например, наушники">
+      </label>
+      <label>Цена
+        <input name="price" maxlength="40" placeholder="15 000 ₸">
+      </label>
+      <label>Ссылка на магазин
+        <input name="link" type="url" maxlength="500" placeholder="https://">
+      </label>
+      <label>Ссылка на фото
+        <input name="imageUrl" type="url" maxlength="500" placeholder="https:// — или загрузи файл ниже">
+      </label>
+      <label>Фото подарка
+        <input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+      </label>
+      <img id="gift-preview" class="preview" alt="" hidden>
+      <label class="check" id="gift-remove-wrap">
+        <input name="removeImage" type="checkbox" value="1">
+        Убрать текущее фото
+      </label>
+      <label>Коротко, зачем этот подарок
+        <textarea name="description" maxlength="400" rows="3" placeholder="Необязательно"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="btn primary" type="submit">Сохранить</button>
+        <button class="btn ghost" type="button" id="gift-release" data-action="release-gift" hidden>Снять бронь</button>
+        <button class="btn danger" type="button" id="gift-delete" data-action="delete-gift" hidden>Удалить</button>
+        <button class="btn ghost" type="button" data-action="close-modal">Отмена</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal" id="modal-reserve" hidden>
+    <div class="modal-back" data-action="close-modal"></div>
+    <form class="modal-card" id="form-reserve" role="dialog" aria-modal="true" aria-labelledby="reserve-title">
+      <h2 id="reserve-title">Забронировать подарок</h2>
+      <p class="hint" id="reserve-text"></p>
+      <input type="hidden" name="id" id="reserve-id">
+      <label>Как тебя зовут?
+        <input name="name" required maxlength="40" minlength="2" autocomplete="name" placeholder="Твоё имя">
+      </label>
+      <p class="hint">После этого подарок станет занят: другой человек выбрать его уже не сможет.</p>
+      <div class="modal-actions">
+        <button class="btn primary" type="submit">Забронировать</button>
+        <button class="btn ghost" type="button" data-action="close-modal">Отмена</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <noscript><p class="loading">Чтобы забронировать подарок, включи JavaScript.</p></noscript>
+  <script src="/app.js?v=9"></script>
+</body>
+</html>
