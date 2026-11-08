@@ -56,7 +56,7 @@ function isHttp(value) {
 
 function safeImg(src) {
   if (!src) return '';
-  if (src.startsWith('/uploads/')) return src;
+  if (src.startsWith('/uploads/')) return src.slice(1);
   return isHttp(src) ? src : '';
 }
 
@@ -212,7 +212,11 @@ async function api(url, options = {}) {
     lastSnap = '';
     openModal('modal-login');
   }
-  if (!response.ok) throw new Error(data.error || 'Не получилось');
+  if (!response.ok) {
+    throw new Error(data.error || (response.status === 404
+      ? 'На этой ссылке бронь и вход не сохраняются'
+      : 'Не получилось'));
+  }
   return data;
 }
 
@@ -418,11 +422,19 @@ function showError(message) {
 
 async function reload(options = {}) {
   try {
-    state.data = await api('/api/wishlist');
+    state.data = await api('api/wishlist');
     render();
   } catch (error) {
-    if (!state.data) showError(error.message);
-    if (!options.quiet) toast(error.message);
+    try {
+      const response = await fetch('wishlist.json');
+      if (!response.ok) throw error;
+      state.data = await response.json();
+      render();
+      return;
+    } catch {
+      if (!state.data) showError(error.message);
+      if (!options.quiet) toast(error.message);
+    }
   }
 }
 
@@ -497,7 +509,7 @@ function openReserve(id) {
 }
 
 async function submitLogin(form) {
-  const data = await api('/api/admin/login', {
+  const data = await api('api/admin/login', {
     method: 'POST',
     json: { password: new FormData(form).get('password') },
     authRedirect: false,
@@ -523,7 +535,7 @@ function payload(form) {
 }
 
 async function submitProfile(form) {
-  const data = await api('/api/admin/profile', { method: 'POST', body: payload(form) });
+  const data = await api('api/admin/profile', { method: 'POST', body: payload(form) });
   state.data = data;
   lastSnap = '';
   closeModals();
@@ -534,7 +546,7 @@ async function submitProfile(form) {
 async function submitGift(form) {
   const body = payload(form);
   const id = body.get('id');
-  const data = await api(id ? `/api/admin/gifts/${id}` : '/api/admin/gifts', {
+  const data = await api(id ? `api/admin/gifts/${id}` : 'api/admin/gifts', {
     method: 'POST',
     body,
   });
@@ -547,7 +559,7 @@ async function submitGift(form) {
 
 async function submitReserve(form) {
   const payload = Object.fromEntries(new FormData(form).entries());
-  const data = await api('/api/reserve', { method: 'POST', json: payload });
+  const data = await api('api/reserve', { method: 'POST', json: payload });
   localStorage.setItem(NAME_KEY, payload.name.trim());
   state.data = data;
   lastSnap = '';
@@ -610,7 +622,7 @@ document.addEventListener('click', async (event) => {
         return;
       }
       pending = true;
-      state.data = await api('/api/reserve', { method: 'POST', json: { id, name } });
+      state.data = await api('api/reserve', { method: 'POST', json: { id, name } });
       lastSnap = '';
       render();
       toast(`${name}, подарок за тобой. Можно выбрать ещё.`);
@@ -624,7 +636,7 @@ document.addEventListener('click', async (event) => {
     if (action === 'back-to-gate') {
       pending = true;
       if (state.token) {
-        await api('/api/admin/logout', { method: 'POST', authRedirect: false }).catch(() => {});
+        await api('api/admin/logout', { method: 'POST', authRedirect: false }).catch(() => {});
       }
       state.admin = false;
       state.role = '';
@@ -638,7 +650,7 @@ document.addEventListener('click', async (event) => {
     if (action === 'unreserve') {
       if (!window.confirm('Снять бронь с этого подарка?')) return;
       pending = true;
-      state.data = await api('/api/unreserve', { method: 'POST', json: { id, name: myName() } });
+      state.data = await api('api/unreserve', { method: 'POST', json: { id, name: myName() } });
       lastSnap = '';
       render();
       toast('Бронь снята, подарок снова можно выбрать');
@@ -646,7 +658,7 @@ document.addEventListener('click', async (event) => {
     if (action === 'release-gift') {
       const giftId = document.getElementById('gift-id').value;
       pending = true;
-      state.data = await api(`/api/admin/gifts/${giftId}/release`, { method: 'POST' });
+      state.data = await api(`api/admin/gifts/${giftId}/release`, { method: 'POST' });
       lastSnap = '';
       closeModals();
       render();
@@ -656,7 +668,7 @@ document.addEventListener('click', async (event) => {
       const giftId = document.getElementById('gift-id').value;
       if (!window.confirm('Удалить этот подарок?')) return;
       pending = true;
-      state.data = await api(`/api/admin/gifts/${giftId}`, { method: 'DELETE' });
+      state.data = await api(`api/admin/gifts/${giftId}`, { method: 'DELETE' });
       lastSnap = '';
       closeModals();
       render();
@@ -712,7 +724,7 @@ async function boot() {
   const remembered = sessionStorage.getItem(ROLE_KEY);
   if (state.token) {
     try {
-      await api('/api/admin/me', { authRedirect: false });
+      await api('api/admin/me', { authRedirect: false });
       state.admin = true;
       state.role = 'owner';
     } catch {
